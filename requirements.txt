@@ -1,5 +1,15 @@
+# Telegram
 telethon==1.36.0
+cryptg==0.4.0
+
+# Environment
 python-dotenv==1.0.1
+
+# Database — PostgreSQL (Railway production)
 asyncpg==0.29.0
+
+# Database — SQLite async (local development)
 aiosqlite==0.20.0
+
+# Keepalive HTTP server
 aiohttp==3.9.5
