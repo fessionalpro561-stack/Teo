@@ -17,8 +17,10 @@ Usage:
 import argparse
 import asyncio
 import logging
+import os
 import signal
 import sys
+from aiohttp import web
 
 # ── Project imports ───────────────────────────────────────────
 import config.settings as cfg
@@ -63,8 +65,34 @@ async def shutdown(signal_name: str, loop: asyncio.AbstractEventLoop):
     loop.stop()
 
 
+async def start_keepalive_server():
+    """
+    HTTP server بسيط على البورت اللي Railway بيحدده.
+    بيخلي Railway يشوف الـ service Active ومش بينامها.
+    """
+    port = int(os.getenv("PORT", "8080"))
+
+    async def health(request):
+        return web.Response(text="FER3OON Sync is running ✅")
+
+    app = web.Application()
+    app.router.add_get("/", health)
+    app.router.add_get("/health", health)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+    logger = logging.getLogger("fer3oon.keepalive")
+    logger.info(f"Keepalive HTTP server running on port {port}")
+
+
 async def main():
     args = parse_args()
+
+    # ── Keepalive HTTP server (يمنع Railway من تنويم الـ service) ──
+    await start_keepalive_server()
 
     # ── Logging setup ─────────────────────────────────────────
     setup_logger(
