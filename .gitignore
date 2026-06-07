@@ -1,0 +1,13 @@
+.env
+*.session
+*.session-journal
+database/sync.db
+logs/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+.env
+*.session
+database/sync.db
+logs/
