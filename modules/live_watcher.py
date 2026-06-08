@@ -118,7 +118,11 @@ class LiveWatcher:
     async def _recover_gap(self, entity, username: str):
         last_id = await self._db.get_last_message_id(username)
         if last_id == 0:
-            return
+    # أول تشغيل — خد آخر 50 رسالة كـ baseline
+    async for message in self._client.iter_messages(entity, limit=1):
+        if isinstance(message, Message):
+            await self._db.update_last_message_id(username, message.id)
+    return
 
         logger.debug(f"[{username}] Checking for missed messages after id={last_id}…")
 
