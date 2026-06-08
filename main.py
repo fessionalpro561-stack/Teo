@@ -149,6 +149,11 @@ async def main():
         replace_hashtags=cfg.REPLACE_HASHTAGS,
         add_hashtags=cfg.ADD_HASHTAGS,
         destination_channel=cfg.DESTINATION_CHANNEL,
+        owner_username=cfg.OWNER_USERNAME,
+        source_identifiers=cfg.SOURCE_IDENTIFIERS,
+        promo_keywords=cfg.PROMO_KEYWORDS,
+        gemini_api_key=cfg.GEMINI_API_KEY,
+        gemini_model=cfg.GEMINI_MODEL,
     )
 
     # ── Publisher ─────────────────────────────────────────────
