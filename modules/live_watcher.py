@@ -68,6 +68,7 @@ class LiveWatcher:
             self._channel_id_map[entity.id] = username
             self._channel_entity_map[username] = entity
             channel_entities.append(entity)
+            await self._db.upsert_channel(username, entity.id, getattr(entity, "title", username))
             logger.info(f"[{username}] Resolved for live monitoring (id={entity.id})")
 
         if not channel_entities:
