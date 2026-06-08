@@ -4,20 +4,14 @@ modules/content_modifier.py
 تعديل المحتوى قبل النشر:
   1. فلترة رسائل الترويج (لا تُنشر)
   2. استبدال روابط ومعرفات القنوات المصدر
-  3. إعادة صياغة احترافية عبر Gemini AI
-  4. إضافة التوقيع
+  3. إضافة التوقيع
 """
 
-import asyncio
 import logging
 import re
 from typing import Optional
 
-import aiohttp
-
 logger = logging.getLogger("fer3oon.modifier")
-
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
 
 
 class ContentModifier:
@@ -34,8 +28,6 @@ class ContentModifier:
         owner_username: str,
         source_identifiers: list,
         promo_keywords: list,
-        gemini_api_key: str = "",
-        gemini_model: str = "gemini-1.5-flash",
     ):
         self.footer_text         = footer_text.strip()
         self.replace_links       = replace_links
@@ -46,8 +38,6 @@ class ContentModifier:
         self.owner_username      = owner_username
         self.source_identifiers  = source_identifiers
         self.promo_keywords      = [k.lower() for k in promo_keywords]
-        self.gemini_api_key      = gemini_api_key
-        self.gemini_model        = gemini_model
 
         # Footer detection
         self._footer_re = re.compile(
@@ -77,7 +67,7 @@ class ContentModifier:
 
     async def process(self, text: Optional[str]) -> Optional[str]:
         """
-        تطبيق كل قواعد التعديل بشكل async.
+        تطبيق كل قواعد التعديل.
         Returns None لو الرسالة ترويجية.
         """
         if text is None:
@@ -97,17 +87,13 @@ class ContentModifier:
         # 4. استبدال أي معرف أو يوزرنيم للقنوات المصدر
         text = self._replace_identifiers(text)
 
-        # 5. إعادة الصياغة بـ Gemini
-        if self.gemini_api_key:
-            text = await self._rewrite_with_gemini(text)
-
-        # 6. الهاشتاجات
+        # 5. الهاشتاجات
         text = self._process_hashtags(text)
 
-        # 7. التوقيع
+        # 6. التوقيع
         text = self._ensure_footer(text)
 
-        # 8. تنظيف المسافات
+        # 7. تنظيف المسافات
         text = self._clean(text)
 
         return text
@@ -146,53 +132,6 @@ class ContentModifier:
                     flags=re.IGNORECASE
                 )
         return text
-
-    async def _rewrite_with_gemini(self, text: str) -> str:
-        """إعادة صياغة النص بأسلوب صحفي عربي احترافي عبر Gemini Flash."""
-        # لو النص قصير جداً أو مجرد رابط، نرجعه كما هو
-        if len(text.strip()) < 20:
-            return text
-
-        prompt = f"""أنت محرر صحفي متخصص في أخبار الفوركس والأسواق المالية.
-
-أعد كتابة الخبر التالي بأسلوب صحفي عربي احترافي مع:
-- الحفاظ على كل المعلومات والأرقام بدقة تامة
-- الحفاظ على الإيموجي كما هي
-- الحفاظ على التنسيق والأسطر
-- لا تضف أي معلومات جديدة
-- لا تحذف أي معلومة مهمة
-- لا تذكر أي اسم قناة أو رابط أو يوزرنيم
-- أعد النص فقط بدون أي مقدمة أو تعليق
-
-النص:
-{text}"""
-
-        url = GEMINI_URL.format(model=self.gemini_model, key=self.gemini_api_key)
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.3,
-                "maxOutputTokens": 1024,
-            }
-        }
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        rewritten = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                        logger.debug("Gemini أعاد الصياغة بنجاح.")
-                        return rewritten
-                    else:
-                        logger.warning(f"Gemini error {resp.status} — نشر النص الأصلي.")
-                        return text
-        except asyncio.TimeoutError:
-            logger.warning("Gemini timeout — نشر النص الأصلي.")
-            return text
-        except Exception as e:
-            logger.warning(f"Gemini exception: {e} — نشر النص الأصلي.")
-            return text
 
     def _process_hashtags(self, text: str) -> str:
         if not (self.remove_hashtags or self.replace_hashtags or self.add_hashtags):
