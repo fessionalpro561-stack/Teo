@@ -14,7 +14,7 @@ SESSION_NAME = os.getenv("SESSION_NAME", "fer3oon_sync_session")
 
 # ─── Channel Configuration ───────────────────────────────────
 # قنوات المصدر — مكتوبة مباشرة
-SOURCE_CHANNELS = ["ForexBreakingNews", "fforexNews"]
+SOURCE_CHANNELS = ["ForexBreakingNews", "fforexNews", "forexfactory_arabic"]
 
 # القناة المستهدفة — مكتوبة مباشرة
 DESTINATION_CHANNEL = os.getenv("DESTINATION_CHANNEL", "ForexNewsEgy")
@@ -56,6 +56,13 @@ SOURCE_IDENTIFIERS = [
     "Telegram.me/fforexNews",
     "@fforexNews",
     "fforexNews",
+    # forexfactory_arabic
+    "https://t.me/forexfactory_arabic",
+    "http://t.me/forexfactory_arabic",
+    "t.me/forexfactory_arabic",
+    "Telegram.me/forexfactory_arabic",
+    "@forexfactory_arabic",
+    "forexfactory_arabic",
 ]
 
 # استبدال الروابط برابط القناة الجديدة
@@ -68,6 +75,10 @@ REPLACE_LINKS = {
     "http://t.me/fforexNews":         "https://t.me/ForexNewsEgy",
     "t.me/fforexNews":                "t.me/ForexNewsEgy",
     "Telegram.me/fforexNews":         "https://t.me/ForexNewsEgy",
+    "https://t.me/forexfactory_arabic": "https://t.me/ForexNewsEgy",
+    "http://t.me/forexfactory_arabic":  "https://t.me/ForexNewsEgy",
+    "t.me/forexfactory_arabic":         "t.me/ForexNewsEgy",
+    "Telegram.me/forexfactory_arabic":  "https://t.me/ForexNewsEgy",
 }
 
 # ─── كلمات الترويج المحظورة ──────────────────────────────────
@@ -104,8 +115,10 @@ PROMO_KEYWORDS = [
 SOURCE_SIGNATURE_PATTERNS = [
     r"(?:https?://)?(?:Telegram\.me|t\.me)/ForexBreakingNews[^\n]*",
     r"(?:https?://)?(?:Telegram\.me|t\.me)/fforexNews[^\n]*",
+    r"(?:https?://)?(?:Telegram\.me|t\.me)/forexfactory_arabic[^\n]*",
     r"@ForexBreakingNews",
     r"@fforexNews",
+    r"@forexfactory_arabic",
 ]
 
 # ─── Hashtags ────────────────────────────────────────────────
