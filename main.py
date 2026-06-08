@@ -167,7 +167,9 @@ async def main():
         # ────────────────────────────────────────────────────
         # PHASE 1 — Archive import
         # ────────────────────────────────────────────────────
-        if not args.live_only:
+        live_only = args.live_only or os.getenv("LIVE_ONLY", "false").lower() == "true"
+
+        if not live_only:
             logger.info("▶ Phase 1: Archive import starting…")
             importer = ArchiveImporter(
                 client=tg_client,
