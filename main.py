@@ -116,12 +116,15 @@ async def main():
         logger.critical("SOURCE_CHANNELS or DESTINATION_CHANNEL is not configured.")
         sys.exit(1)
 
+    # ── Live only detection (CLI flag OR env var) ─────────────
+    live_only = args.live_only or os.getenv("LIVE_ONLY", "false").lower() == "true"
+
     logger.info("=" * 60)
     logger.info("FER3OON Telegram Channel Sync")
     logger.info(f"Sources       : {', '.join(cfg.SOURCE_CHANNELS)}")
     logger.info(f"Destination   : {cfg.DESTINATION_CHANNEL}")
     logger.info(f"Archive only  : {args.archive_only}")
-    logger.info(f"Live only     : {args.live_only}")
+    logger.info(f"Live only     : {live_only}")
     logger.info(f"Duplicate chk : {cfg.DUPLICATE_CHECK}")
     logger.info("=" * 60)
 
@@ -167,8 +170,6 @@ async def main():
         # ────────────────────────────────────────────────────
         # PHASE 1 — Archive import
         # ────────────────────────────────────────────────────
-        live_only = args.live_only or os.getenv("LIVE_ONLY", "false").lower() == "true"
-
         if not live_only:
             logger.info("▶ Phase 1: Archive import starting…")
             importer = ArchiveImporter(
