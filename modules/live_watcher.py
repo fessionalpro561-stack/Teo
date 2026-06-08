@@ -230,7 +230,14 @@ class LiveWatcher:
                 await self._db.mark_message(username, message.id, content_hash, status="skipped")
                 return True
 
-        modified_text = self._modifier.process(raw_text)
+        modified_text = await self._modifier.process(raw_text)
+
+        # رسالة ترويجية — تجاهل
+        if modified_text is None:
+            logger.info(f"[LIVE][{username}] رسالة ترويجية (msg {message.id}) — تم حذفها.")
+            await self._db.mark_message(username, message.id, content_hash, status="skipped")
+            return True
+
         dest_id = await self._publisher.publish(message, modified_text)
 
         status = "forwarded" if dest_id else "error"
@@ -271,7 +278,15 @@ class LiveWatcher:
                     await self._db.mark_message(username, m.id, content_hash, status="skipped")
                 return True
 
-        modified_text = self._modifier.process(caption_text) if caption_text else None
+        modified_text = await self._modifier.process(caption_text) if caption_text else None
+
+        # ألبوم ترويجي — تجاهل
+        if caption_text and modified_text is None:
+            logger.info(f"[LIVE][{username}] ألبوم ترويجي gid={first.grouped_id} — تم حذفه.")
+            for m in messages:
+                await self._db.mark_message(username, m.id, content_hash, status="skipped")
+            return True
+
         dest_id = await self._publisher.publish(first, modified_text, grouped_messages=messages)
 
         status = "forwarded" if dest_id else "error"
