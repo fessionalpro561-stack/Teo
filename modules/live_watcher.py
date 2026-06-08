@@ -4,13 +4,12 @@ modules/live_watcher.py
 Phase 2 — Real-time monitoring.
 
 FIXES vs previous version:
-  1. Album buffering: sliding window timer resets on every new item arrival,
-     so we never flush an incomplete album if Telegram is slow delivering items.
-  2. Album ordering: sorted by id before publish (same fix as archive).
-  3. cursor (last_message_id) advanced for ALL items in album, not just first.
-  4. Gap recovery: on startup, fetch any messages received while bot was down
-     (between last_message_id in DB and current latest) before registering handler.
-  5. Error isolation: one bad message never crashes the handler loop.
+  1. Album buffering: sliding window timer resets on every new item arrival.
+  2. Album ordering: sorted by id before publish.
+  3. cursor advanced for ALL items in album.
+  4. Gap recovery on startup.
+  5. Error isolation.
+  6. [NEW] Polling fallback every 60s as backup for missed events (large channels).
 """
 
 import asyncio
@@ -27,9 +26,8 @@ from modules.telegram_client import FER3OONClient
 
 logger = logging.getLogger("fer3oon.live")
 
-# Seconds to wait after the LAST album item before flushing.
-# Resets on every new item arrival → handles slow Telegram delivery.
 ALBUM_COLLECT_TIMEOUT = 4.0
+POLL_INTERVAL = 60  # seconds
 
 
 class LiveWatcher:
@@ -52,21 +50,14 @@ class LiveWatcher:
         self._destination = destination_channel
         self._duplicate_check = duplicate_check
 
-        # grouped_id → {"messages": [], "task": Task, "username": str}
         self._pending_albums: dict[int, dict] = {}
         self._lock = asyncio.Lock()
-
-        # channel_id (int) → username (str)
         self._channel_id_map: dict[int, str] = {}
+        self._channel_entity_map: dict[str, object] = {}
 
     # ─── Setup ────────────────────────────────────────────────
 
     async def setup(self):
-        """
-        1. Resolve all source channels.
-        2. Run gap recovery (messages missed while bot was offline).
-        3. Register live event handler.
-        """
         channel_entities = []
 
         for username in self._sources:
@@ -75,6 +66,7 @@ class LiveWatcher:
                 logger.error(f"[{username}] Cannot resolve — skipping.")
                 continue
             self._channel_id_map[entity.id] = username
+            self._channel_entity_map[username] = entity
             channel_entities.append(entity)
             logger.info(f"[{username}] Resolved for live monitoring (id={entity.id})")
 
@@ -82,14 +74,12 @@ class LiveWatcher:
             logger.error("No valid channels to monitor!")
             return
 
-        # ── Gap recovery ──────────────────────────────────────
-        # Fetch messages that arrived while the bot was offline.
-        # This runs BEFORE we register the event handler to avoid duplicates.
+        # Gap recovery before registering handler
         for entity in channel_entities:
             username = self._channel_id_map[entity.id]
             await self._recover_gap(entity, username)
 
-        # ── Register live handler ─────────────────────────────
+        # Register live event handler
         @self._client.client.on(events.NewMessage(chats=channel_entities))
         async def _on_new_message(event: events.NewMessage.Event):
             try:
@@ -97,24 +87,40 @@ class LiveWatcher:
             except Exception as e:
                 logger.error(f"Unhandled error in live handler: {e}", exc_info=True)
 
+        # Start polling loop as backup
+        asyncio.create_task(self._polling_loop())
+
         logger.info(
             f"✅ Live watcher active on {len(channel_entities)} channel(s). "
-            "Listening for new posts…"
+            f"Polling every {POLL_INTERVAL}s as backup."
         )
+
+    # ─── Polling loop (backup for missed events) ───────────────
+
+    async def _polling_loop(self):
+        """
+        Every POLL_INTERVAL seconds, check each channel for new messages
+        that the event handler may have missed (large channels / subscriber accounts).
+        """
+        await asyncio.sleep(POLL_INTERVAL)  # initial delay — let events handle first burst
+
+        while True:
+            try:
+                for username, entity in self._channel_entity_map.items():
+                    await self._recover_gap(entity, username)
+            except Exception as e:
+                logger.error(f"Polling loop error: {e}", exc_info=True)
+
+            await asyncio.sleep(POLL_INTERVAL)
 
     # ─── Gap recovery ─────────────────────────────────────────
 
     async def _recover_gap(self, entity, username: str):
-        """
-        Fetch and process any messages received since last_message_id.
-        Called once at startup before the live handler is registered.
-        """
         last_id = await self._db.get_last_message_id(username)
         if last_id == 0:
-            # Archive importer handles this case; nothing to recover
             return
 
-        logger.info(f"[{username}] Gap recovery: fetching messages after id={last_id}…")
+        logger.debug(f"[{username}] Checking for missed messages after id={last_id}…")
 
         gap_count = 0
         pending_albums: dict[int, list[Message]] = {}
@@ -130,7 +136,6 @@ class LiveWatcher:
                 gap_count += 1
                 continue
 
-            # Flush completed albums before non-album message
             for gid, msgs in list(pending_albums.items()):
                 msgs_sorted = sorted(msgs, key=lambda m: m.id)
                 ok = await self._process_album(username, msgs_sorted)
@@ -143,7 +148,6 @@ class LiveWatcher:
                 await self._db.update_last_message_id(username, message.id)
             gap_count += 1
 
-        # Flush remaining albums
         for gid, msgs in pending_albums.items():
             msgs_sorted = sorted(msgs, key=lambda m: m.id)
             ok = await self._process_album(username, msgs_sorted)
@@ -151,9 +155,7 @@ class LiveWatcher:
                 await self._db.update_last_message_id(username, msgs_sorted[-1].id)
 
         if gap_count:
-            logger.info(f"[{username}] Gap recovery complete: {gap_count} messages processed.")
-        else:
-            logger.info(f"[{username}] No gap — channel is up to date.")
+            logger.info(f"[{username}] Recovered {gap_count} missed message(s).")
 
     # ─── Live event handler ───────────────────────────────────
 
@@ -184,7 +186,6 @@ class LiveWatcher:
 
             self._pending_albums[gid]["messages"].append(message)
 
-            # Cancel old timer and start a fresh one (sliding window)
             old_task = self._pending_albums[gid]["task"]
             if old_task and not old_task.done():
                 old_task.cancel()
@@ -193,7 +194,6 @@ class LiveWatcher:
             self._pending_albums[gid]["task"] = new_task
 
     async def _flush_album_after_timeout(self, grouped_id: int):
-        """Wait, then publish. Cancelled & rescheduled on every new item."""
         await asyncio.sleep(ALBUM_COLLECT_TIMEOUT)
 
         async with self._lock:
@@ -207,7 +207,6 @@ class LiveWatcher:
 
         ok = await self._process_album(username, messages)
         if ok:
-            # Advance cursor to the LAST item in the album
             await self._db.update_last_message_id(username, messages[-1].id)
 
     # ─── Single message processor ─────────────────────────────
@@ -232,7 +231,6 @@ class LiveWatcher:
 
         modified_text = await self._modifier.process(raw_text)
 
-        # رسالة ترويجية — تجاهل
         if modified_text is None:
             logger.info(f"[LIVE][{username}] رسالة ترويجية (msg {message.id}) — تم حذفها.")
             await self._db.mark_message(username, message.id, content_hash, status="skipped")
@@ -280,7 +278,6 @@ class LiveWatcher:
 
         modified_text = await self._modifier.process(caption_text) if caption_text else None
 
-        # ألبوم ترويجي — تجاهل
         if caption_text and modified_text is None:
             logger.info(f"[LIVE][{username}] ألبوم ترويجي gid={first.grouped_id} — تم حذفه.")
             for m in messages:
