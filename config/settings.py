@@ -133,7 +133,7 @@ DUPLICATE_CHECK = os.getenv("DUPLICATE_CHECK", "true").lower() == "true"
 DATABASE_PATH = os.getenv("DATABASE_PATH", "database/sync.db")
 
 # ─── Logging ─────────────────────────────────────────────────
-LOG_LEVEL        = os.getenv("LOG_LEVEL", "INFO")
+LOG_LEVEL        = os.getenv("LOG_LEVEL", "DEBUG")
 LOG_FILE         = os.getenv("LOG_FILE", "logs/sync.log")
 LOG_MAX_BYTES    = int(os.getenv("LOG_MAX_BYTES", str(10 * 1024 * 1024)))
 LOG_BACKUP_COUNT = int(os.getenv("LOG_BACKUP_COUNT", "5"))
